@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
+  <meta name="theme-color" content="#0f172a" />
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icons/icon.svg">
+  <link rel="stylesheet" href="style.css">
+  <title>Flashcards PWA</title>
+</head>
+<body>
+  <header class="app-header">
+    <h1>Flashcards</h1>
+  </header>
+  <div style="text-align:center;margin:6px 0"></div>
+  <div id="app-toast" class="hidden" style="position:fixed;left:50%;transform:translateX(-50%);bottom:18px;z-index:40;padding:10px 16px;border-radius:12px;background:rgba(0,0,0,0.8);color:#fff;font-weight:600;box-shadow:0 6px 18px rgba(0,0,0,0.3)"></div>
+  <div id="app-errors" class="card hidden" style="background:rgba(255,40,40,0.06);color:#ffb4b4;border:1px solid rgba(255,40,40,0.12);margin:12px;max-width:540px;margin-left:auto;margin-right:auto"></div>
+
+  <main id="app">
+    <section id="decks-view" class="view">
+      <div class="controls">
+        <button id="new-deck-btn" class="btn primary">New Deck</button>
+      </div>
+  <div id="decks-list"></div>
+
+      <div id="new-deck-form" class="card hidden">
+        <h2>Create New Deck</h2>
+        <input id="deck-name" placeholder="Deck Name" />
+        <div class="row">
+          <button id="create-deck" class="btn primary">Create</button>
+          <button id="cancel-deck" class="btn">Cancel</button>
+        </div>
+      </div>
+
+      <div id="deck-detail" class="card hidden">
+        <div class="deck-detail-header">
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <input id="detail-deck-name-input" placeholder="Deck name" style="flex: 1;" />
+                <button id="detail-edit-name" class="btn icon" aria-label="Edit name">✏️</button>
+            </div>
+            <div id="detail-deck-meta" class="deck-meta" style="margin-top:6px;color:var(--muted)"></div>
+            <div class="row" style="margin-top: 8px;"><button id="save-deck" class="btn primary">Save</button><button id="detail-add-card" class="btn primary">Add Card</button><button id="close-detail" class="btn">Close</button></div>
+        </div>
+        <div id="add-card-form" class="card hidden">
+          <h2 id="add-card-title">ADD CARD</h2>
+          <input id="new-card-question" placeholder="Question / Word" />
+          <input id="new-card-answer" placeholder="Answer / Definition" />
+          <div class="row">
+            <button id="save-card" class="btn primary">Add</button>
+            <button id="cancel-card" class="btn">Cancel</button>
+          </div>
+        </div>
+        <div id="deck-cards-list"></div>
+      </div>
+    </section>
+
+    <section id="study-view" class="view hidden">
+      <div class="study-header">
+        <button id="back-to-decks" class="btn">← Back</button>
+        <h2 id="study-deck-title"></h2>
+      </div>
+
+      <div id="card-area" class="card card-large">
+        <div id="card-question" class="card-face">Question</div>
+          <div id="card-answer" class="card-face hidden">Answer</div>
+          <input id="typed-answer" placeholder="Type your answer and press Enter" autocomplete="off" />
+          <div id="typed-answer-display" class="deck-meta hidden"></div>
+          <button id="show-answer" class="btn primary">Show Answer</button>
+        <div id="evaluation" class="eval-row hidden">
+          <button data-eval="again" class="btn eval again"><div>Again</div><small class="proj"></small></button>
+          <button data-eval="hard" class="btn eval hard"><div>Hard</div><small class="proj"></small></button>
+          <button data-eval="good" class="btn eval good"><div>Good</div><small class="proj"></small></button>
+          <button data-eval="easy" class="btn eval easy"><div>Easy</div><small class="proj"></small></button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js" defer></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js').catch(()=>{});
+      });
+    }
+  </script>
+</body>
+</html>
