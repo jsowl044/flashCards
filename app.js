@@ -10,35 +10,43 @@ const todayISO = (offsetDays=0)=>{
 /* Data layer */
 function loadDecks(){
   try{
-    const data = JSON.parse(localStorage.getItem(STORAGE_KEY)||'[]') || [];
+    const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY)||'[]');
+    if(!Array.isArray(parsed)) return [];
+    const data = parsed.filter(deck=>deck && typeof deck === 'object');
+    let changed = data.length !== parsed.length;
     // migrate older Spanish field names to English keys
     data.forEach(deck=>{
-      if(deck && Array.isArray(deck.cards)){
+      if(deck){
+        if(!Array.isArray(deck.cards)){ deck.cards = []; changed = true; }
+        const validCards = deck.cards.filter(card=>card && typeof card === 'object');
+        if(validCards.length !== deck.cards.length){ deck.cards = validCards; changed = true; }
         deck.cards.forEach(card=>{
-          if(!card) return;
-          if(card.pregunta){ card.question = card.pregunta; delete card.pregunta; }
-          if(card.respuesta){ card.answer = card.respuesta; delete card.respuesta; }
+          if(card.pregunta){ card.question = card.pregunta; delete card.pregunta; changed = true; }
+          if(card.respuesta){ card.answer = card.respuesta; delete card.respuesta; changed = true; }
           if(card.estado){
             const m = { 'NUEVA':'NEW','APRENDIZAJE':'LEARNING','REPASO':'REVIEW' }[card.estado] || card.estado;
-            card.state = m; delete card.estado;
+            card.state = m; delete card.estado; changed = true;
           }
-            if(card.intervalo !== undefined){ card.intervalDays = card.intervalo; delete card.intervalo; }
-            if(card.intervaloMinutes !== undefined){ card.intervalMinutes = card.intervaloMinutes; delete card.intervaloMinutes; }
-            if(card.factorFacilidad !== undefined){ card.easeFactor = card.factorFacilidad; delete card.factorFacilidad; }
-            if(card.fechaProximaRevision){ card.nextReview = card.fechaProximaRevision; delete card.fechaProximaRevision; }
+            if(card.intervalo !== undefined){ card.intervalDays = card.intervalo; delete card.intervalo; changed = true; }
+            if(card.intervaloMinutes !== undefined){ card.intervalMinutes = card.intervaloMinutes; delete card.intervaloMinutes; changed = true; }
+            if(card.factorFacilidad !== undefined){ card.easeFactor = card.factorFacilidad; delete card.factorFacilidad; changed = true; }
+            if(card.fechaProximaRevision){ card.nextReview = card.fechaProximaRevision; delete card.fechaProximaRevision; changed = true; }
             // normalize legacy fields into the SM-2 model: reps, interval (days), easeFactor
-            if(card.lastEvaluation === undefined) card.lastEvaluation = card.lastEval || '';
+            if(card.lastEvaluation === undefined){ card.lastEvaluation = card.lastEval || ''; changed = true; }
             // legacy 'goodCount' used previously as consecutive correct count -> map to reps
-            if(card.goodCount !== undefined && card.reps === undefined){ card.reps = Number(card.goodCount||0); delete card.goodCount; }
-            if(card.reps === undefined) card.reps = Number(card.reps||0);
+            if(card.goodCount !== undefined && card.reps === undefined){ card.reps = Number(card.goodCount||0); delete card.goodCount; changed = true; }
+            if(card.reps === undefined){ card.reps = 0; changed = true; }
             // map intervalDays/intervalo -> interval (days)
-            if(card.intervalDays !== undefined && card.interval === undefined){ card.interval = Number(card.intervalDays||0); delete card.intervalDays; }
-            if(card.intervalMinutes !== undefined && card.interval === undefined){ card.interval = Math.round((Number(card.intervalMinutes)||0)/1440) || 0; delete card.intervalMinutes; }
-            if(card.interval === undefined) card.interval = Number(card.interval||0);
-            if(card.easeFactor === undefined) card.easeFactor = Number(card.easeFactor||2.5);
+            if(card.intervalDays !== undefined && card.interval === undefined){ card.interval = Number(card.intervalDays||0); delete card.intervalDays; changed = true; }
+            if(card.intervalMinutes !== undefined && card.interval === undefined){ card.interval = Math.round((Number(card.intervalMinutes)||0)/1440) || 0; delete card.intervalMinutes; changed = true; }
+            if(card.interval === undefined){ card.interval = 0; changed = true; }
+            if(card.easeFactor === undefined){ card.easeFactor = 2.5; changed = true; }
+            if(!card.state){ card.state = card.interval > 0 ? 'REVIEW' : 'NEW'; changed = true; }
+            if(!card.nextReview || Number.isNaN(new Date(card.nextReview).getTime())){ card.nextReview = new Date().toISOString(); changed = true; }
         });
       }
     });
+    if(changed) saveDecks(data);
     return data;
   }catch(e){return []}
 }
@@ -70,87 +78,59 @@ function addCardToDeck(deckId, question, answer){
 
 function getDueCards(deck){
   const nowISO = new Date().toISOString();
-  return deck.cards.filter(c=>c.nextReview <= nowISO).sort((a,b)=>a.nextReview.localeCompare(b.nextReview));
+  return (deck.cards || []).filter(c=>c && c.nextReview <= nowISO).sort((a,b)=>a.nextReview.localeCompare(b.nextReview));
 }
 
-/* SM-2 simplified scheduler */
-function scheduleCard(card, evaluation){
-  // Implement SM-2 algorithm (days-based intervals)
-  // Fields used: card.reps (consecutive correct), card.interval (days), card.easeFactor
-  card.easeFactor = Number(card.easeFactor || 2.5);
-  card.reps = Number(card.reps || 0);
-  card.interval = Number(card.interval || 0);
-  const next = new Date();
-  // Decide if card is in learning mode (use minute-level scheduling) or review mode (days)
-  const inLearning = (card.state === 'LEARNING' || !card.state) || (card.interval === 0);
+/* Scheduling. The same calculation powers the buttons and the saved card. */
+function calculateSchedule(card, evaluation, now=new Date()){
+  const nextCard = {
+    ...card,
+    easeFactor: Number(card.easeFactor || 2.5),
+    reps: Number(card.reps || 0),
+    interval: Number(card.interval || 0)
+  };
+  const next = new Date(now);
+  let minutes = null;
+  let days = null;
+  const inLearning = nextCard.state !== 'REVIEW';
 
   if(inLearning){
-    // minute-based learning schedule (preserve prior behavior)
-    let minutes = 0;
     if(evaluation === 'again'){
-      minutes = 1;
-      card.reps = 0;
-      card.easeFactor = Math.max(1.3, +(card.easeFactor - 0.20).toFixed(2));
-      card.state = 'LEARNING';
+      minutes = 1; nextCard.reps = 0; nextCard.easeFactor = Math.max(1.3, +(nextCard.easeFactor - 0.20).toFixed(2)); nextCard.state = 'LEARNING';
     } else if(evaluation === 'hard'){
-      minutes = 8;
-      card.reps = 0;
-      card.easeFactor = Math.max(1.3, +(card.easeFactor - 0.15).toFixed(2));
-      card.state = 'LEARNING';
+      minutes = 8; nextCard.reps = 0; nextCard.easeFactor = Math.max(1.3, +(nextCard.easeFactor - 0.15).toFixed(2)); nextCard.state = 'LEARNING';
     } else if(evaluation === 'good'){
-      if(card.reps >= 1){
-        // second good -> 1 day
-        minutes = 1440;
-        card.reps = card.reps + 1;
-        card.state = 'REVIEW';
+      if(nextCard.reps >= 1){
+        days = 1; nextCard.reps = 1; nextCard.interval = 1; nextCard.state = 'REVIEW';
       } else {
-        minutes = 15;
-        card.reps = card.reps + 1;
-        card.state = 'LEARNING';
+        minutes = 15; nextCard.reps = 1; nextCard.interval = 0; nextCard.state = 'LEARNING';
       }
     } else if(evaluation === 'easy'){
-      minutes = 1440 * 4;
-      card.reps = 0;
-      card.easeFactor = +(card.easeFactor + 0.15).toFixed(2);
-      card.state = 'REVIEW';
+      days = 4; nextCard.reps = 1; nextCard.interval = 4; nextCard.easeFactor = +(nextCard.easeFactor + 0.15).toFixed(2); nextCard.state = 'REVIEW';
     }
-
-    // update interval in days (rounded down) but keep precise nextReview in minutes
-    card.interval = Math.round(minutes / 1440);
-    next.setTime(Date.now() + minutes * 60 * 1000);
-  }
-  else {
-    // Review mode: use SM-2 days-based updates
+  } else {
     if(evaluation === 'again'){
-    card.reps = 0;
-    card.interval = 0;
-    card.easeFactor = Math.max(1.3, +(card.easeFactor - 0.20).toFixed(2));
-    card.state = 'LEARNING';
-  } else if(evaluation === 'hard'){
-    card.easeFactor = Math.max(1.3, +(card.easeFactor - 0.15).toFixed(2));
-    card.interval = Math.max(1, Math.round(card.interval * 1.2));
-    card.state = 'REVIEW';
-  } else if(evaluation === 'good'){
-    card.reps = card.reps + 1;
-    if(card.reps === 1){
-      card.interval = 1;
-    } else if(card.reps === 2){
-      card.interval = 6;
-    } else {
-      card.interval = Math.max(1, Math.round(card.interval * card.easeFactor));
+      minutes = 1; nextCard.reps = 0; nextCard.interval = 0; nextCard.easeFactor = Math.max(1.3, +(nextCard.easeFactor - 0.20).toFixed(2)); nextCard.state = 'LEARNING';
+    } else if(evaluation === 'hard'){
+      days = Math.max(1, Math.round(nextCard.interval * 1.2)); nextCard.easeFactor = Math.max(1.3, +(nextCard.easeFactor - 0.15).toFixed(2)); nextCard.interval = days;
+    } else if(evaluation === 'good'){
+      nextCard.reps += 1;
+      days = nextCard.reps === 2 ? 6 : Math.max(1, Math.round(nextCard.interval * nextCard.easeFactor));
+      nextCard.interval = days;
+    } else if(evaluation === 'easy'){
+      nextCard.reps += 1; nextCard.easeFactor = +(nextCard.easeFactor + 0.15).toFixed(2);
+      days = Math.max(1, Math.round(nextCard.interval * nextCard.easeFactor * 1.3)); nextCard.interval = days;
     }
-    card.state = 'REVIEW';
-  } else if(evaluation === 'easy'){
-    card.reps = card.reps + 1;
-    card.easeFactor = +(card.easeFactor + 0.15).toFixed(2);
-    card.interval = Math.max(1, Math.round(card.interval * card.easeFactor * 1.3));
-    card.state = 'REVIEW';
   }
-  next.setHours(0,0,0,0); next.setDate(next.getDate() + Number(card.interval || 0));
+
+  if(minutes !== null) next.setTime(now.getTime() + minutes * 60 * 1000);
+  else { next.setHours(0,0,0,0); next.setDate(next.getDate() + days); }
+  nextCard.lastEvaluation = evaluation;
+  nextCard.nextReview = next.toISOString();
+  return { card: nextCard, minutes: minutes === null ? days * 1440 : minutes, days: days === null ? Math.round(minutes / 1440) : days };
 }
-  card.lastEvaluation = evaluation;
-  card.nextReview = next.toISOString();
-}
+
+function scheduleCard(card, evaluation){ Object.assign(card, calculateSchedule(card, evaluation).card); }
 
 /* UI */
 let currentDeckId = null;
@@ -203,36 +183,13 @@ function computeNextDueInfo(deck){
 }
 
 function projectedSchedule(card, evaluation){
-  // Decide learning (minute) projections vs days
-  const reps = Number(card.reps||0);
-  const ease = Number(card.easeFactor||2.5);
-  const current = Number(card.interval||0);
-  const inLearning = (reps === 0) || (card.state === 'LEARNING') || (current === 0);
-  if(inLearning){
-    // minute-based projection
-    let minutes = 0;
-    if(evaluation === 'again') minutes = 1;
-    else if(evaluation === 'hard') minutes = (reps>=1 || card.lastEvaluation==='good') ? 15 : 8;
-    else if(evaluation === 'good') minutes = (reps>=1) ? 1440 : 15;
-    else if(evaluation === 'easy') minutes = 1440*4;
-    const human = minutes < 60 ? `${minutes} min` : (minutes % 1440 === 0 ? `${minutes/1440} day${minutes/1440===1?'':'s'}` : `${Math.round(minutes/60)} h`);
-    return {minutes, human, days: Math.round(minutes/1440)};
-  }
-  // days-based projection
-  let days = 0;
-  if(evaluation === 'again') days = 1;
-  else if(evaluation === 'hard') days = Math.max(1, Math.round((current || 1) * 1.2));
-  else if(evaluation === 'good'){
-    if(reps === 0) days = 1;
-    else if(reps === 1) days = 6;
-    else days = Math.max(1, Math.round((current || 1) * ease));
-  } else if(evaluation === 'easy'){
-    const newEase = +(ease + 0.15).toFixed(2);
-    const base = Math.max(1, current || 1);
-    days = Math.max(1, Math.round(base * newEase * 1.3));
-  }
-  const human = days === 0 ? 'today' : (days === 1 ? 'in 1 day' : `in ${days} days`);
-  return {minutes: days*1440, human, days};
+  const schedule = calculateSchedule(card, evaluation);
+  const human = schedule.minutes < 60
+    ? `${schedule.minutes} min`
+    : schedule.minutes % 1440 === 0
+      ? `${schedule.minutes / 1440} day${schedule.minutes / 1440 === 1 ? '' : 's'}`
+      : `${Math.round(schedule.minutes / 60)} h`;
+  return {...schedule, human};
 }
 
 function escapeHtml(s){ return (s||'').toString().replace(/[&<>"']/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[c])) }
@@ -284,15 +241,15 @@ document.addEventListener('DOMContentLoaded', ()=>{
   });
 
   // deck detail controls
-  $('close-detail').addEventListener('click', ()=>{ $('deck-detail').classList.add('hidden'); $('decks-view').classList.remove('hidden'); renderDecks(); });
+  $('close-detail').addEventListener('click', closeDeckDetail);
   $('detail-add-card').addEventListener('click', ()=>{ openAddCardForm(currentDeckId); });
+  $('detail-edit-name').addEventListener('click', ()=>{ const input = $('detail-deck-name-input'); input.removeAttribute('disabled'); input.focus(); });
   // save deck metadata
   const saveDeckBtn = $('save-deck'); if(saveDeckBtn){ saveDeckBtn.addEventListener('click', ()=>{
     const nameInput = $('detail-deck-name-input'); if(!nameInput) return; const newName = nameInput.value.trim(); if(!newName){ showToast('Deck name required'); return; }
     const decks = loadDecks(); const deck = decks.find(d=>d.id===currentDeckId); if(!deck) return; deck.name = newName; saveDecks(decks); renderDeckDetail(currentDeckId); renderDecks(); showToast('Deck saved');
     // close detail view after saving (save implies close)
-    const dd = $('deck-detail'); if(dd){ dd.classList.add('hidden'); }
-    $('decks-view').classList.remove('hidden');
+    closeDeckDetail();
   }); }
 
   // study view
@@ -313,7 +270,16 @@ document.addEventListener('DOMContentLoaded', ()=>{
   });
 });
 
-function openAddCardForm(deckId){ currentDeckId = deckId; $('add-card-form').classList.remove('hidden'); }
+function openAddCardForm(deckId){ currentDeckId = deckId; clearCardForm(); $('add-card-form').classList.remove('hidden'); }
+
+function closeDeckDetail(){
+  $('add-card-form').classList.add('hidden');
+  clearCardForm();
+  $('deck-detail').classList.add('hidden');
+  $('decks-list').classList.remove('hidden');
+  document.querySelector('#decks-view .controls').classList.remove('hidden');
+  renderDecks();
+}
 
 function clearCardForm(){
   $('new-card-question').value=''; $('new-card-answer').value=''; delete $('save-card').dataset.editId; $('add-card-title').textContent='ADD CARD';
@@ -330,7 +296,9 @@ function openDeckDetail(deckId){
     renderDeckDetail(deckId);
     if(!deckExists){ const ids = decks.map(d=>d.id).slice(0,10).join(','); showError(`Deck not found: ${deckId}. Loaded decks: ${ids}`); }
        $('deck-detail').classList.remove('hidden');
-       $('decks-view').classList.remove('hidden');
+       $('decks-list').classList.add('hidden');
+       document.querySelector('#decks-view .controls').classList.add('hidden');
+       $('new-deck-form').classList.add('hidden');
   }catch(e){ showError('openDeckDetail failed: '+e.message); }
 }
 
@@ -340,11 +308,8 @@ function renderDeckDetail(deckId){
   if(!deck){ if(list) list.innerHTML = '<div class="card">Deck not found.</div>'; return; }
   // populate editable name input and show deck-only details
   const nameInput = $('detail-deck-name-input'); if(nameInput){ nameInput.value = deck.name; nameInput.setAttribute('disabled','true'); }
-  // wire up the existing pencil button (now in HTML) to enable editing
-  const pencil = $('detail-edit-name'); if(pencil && nameInput){ pencil.addEventListener('click', ()=>{ nameInput.removeAttribute('disabled'); nameInput.focus(); }); }
   const meta = $('detail-deck-meta'); if(meta) meta.textContent = `${deck.cards.length} cards`;
-  // hide close button (save will close)
-  const closeBtn = $('close-detail'); if(closeBtn){ closeBtn.classList.add('hidden'); }
+  const closeBtn = $('close-detail'); if(closeBtn){ closeBtn.classList.remove('hidden'); }
   list.innerHTML='';
   if(deck.cards.length===0){ list.innerHTML='<div class="card">No cards in this deck.</div>'; return; }
   deck.cards.forEach(card=>{
