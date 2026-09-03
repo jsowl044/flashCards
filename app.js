@@ -140,7 +140,12 @@ function calculateSchedule(card, evaluation, now=new Date()){
     if(evaluation === 'again'){
       minutes = 1; nextCard.reps = 0; nextCard.interval = 0; nextCard.easeFactor = Math.max(1.3, +(nextCard.easeFactor - 0.20).toFixed(2)); nextCard.state = 'LEARNING';
     } else if(evaluation === 'hard'){
-      days = roundInterval(nextCard.interval * 1.2); nextCard.easeFactor = Math.max(1.3, +(nextCard.easeFactor - 0.15).toFixed(2)); nextCard.interval = days;
+      days = roundInterval(nextCard.interval * 1.2);
+      nextCard.easeFactor = Math.max(1.3, +(nextCard.easeFactor - 0.15).toFixed(2));
+      // A Hard review has already moved the card beyond its first 1-day review.
+      // Without this, later Good/Easy evaluations would keep using the fixed 6-day step.
+      nextCard.reps = Math.max(2, nextCard.reps);
+      nextCard.interval = days;
     } else if(evaluation === 'good'){
       nextCard.reps += 1;
       days = nextCard.reps === 2 ? 6 : roundInterval(nextCard.interval * nextCard.easeFactor);
