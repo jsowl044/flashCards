@@ -1,5 +1,6 @@
 // Flashcards PWA — app.js
 const STORAGE_KEY = 'flashcards_decks_v1';
+const STORAGE_BACKUP_KEY = 'flashcards_decks_backup_v1';
 
 /* Utility */
 const $ = (id)=>document.getElementById(id);
@@ -8,12 +9,30 @@ const todayISO = (offsetDays=0)=>{
 }
 
 /* Data layer */
+function parseStoredDecks(value){
+  if(!value) return { decks: [], normalized: false };
+  try{
+    const parsed = JSON.parse(value);
+    if(Array.isArray(parsed)) return { decks: parsed, normalized: false };
+    // DevTools often makes it convenient to save just one deck object. Accept it
+    // and rewrite it in the app's normal array format on the next save.
+    if(parsed && typeof parsed === 'object' && Array.isArray(parsed.cards)) return { decks: [parsed], normalized: true };
+  }catch(e){ /* An incomplete manual JSON edit can be recovered from the backup. */ }
+  return null;
+}
+
 function loadDecks(){
   try{
-    const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY)||'[]');
-    if(!Array.isArray(parsed)) return [];
-    const data = parsed.filter(deck=>deck && typeof deck === 'object');
-    let changed = data.length !== parsed.length;
+    let stored = parseStoredDecks(localStorage.getItem(STORAGE_KEY));
+    let restoredFromBackup = false;
+    if(stored === null){
+      stored = parseStoredDecks(localStorage.getItem(STORAGE_BACKUP_KEY));
+      if(stored === null) return [];
+      restoredFromBackup = true;
+      console.warn('Flashcards: restored the last valid saved data after an invalid Local Storage edit.');
+    }
+    const data = stored.decks.filter(deck=>deck && typeof deck === 'object');
+    let changed = stored.normalized || restoredFromBackup || data.length !== stored.decks.length;
     // migrate older Spanish field names to English keys
     data.forEach((deck, index)=>{
       if(deck){
@@ -52,7 +71,11 @@ function loadDecks(){
     return data;
   }catch(e){return []}
 }
-function saveDecks(decks){ localStorage.setItem(STORAGE_KEY, JSON.stringify(decks)); }
+function saveDecks(decks){
+  const serialized = JSON.stringify(decks);
+  localStorage.setItem(STORAGE_KEY, serialized);
+  localStorage.setItem(STORAGE_BACKUP_KEY, serialized);
+}
 function findDeck(decks, deckId){ return decks.find(deck=>String(deck.id) === String(deckId)); }
 
 function createDeck(name){
@@ -121,8 +144,16 @@ function calculateSchedule(card, evaluation, now=new Date()){
       days = nextCard.reps === 2 ? 6 : Math.max(1, Math.round(nextCard.interval * nextCard.easeFactor));
       nextCard.interval = days;
     } else if(evaluation === 'easy'){
-      nextCard.reps += 1; nextCard.easeFactor = +(nextCard.easeFactor + 0.15).toFixed(2);
-      days = Math.max(1, Math.round(nextCard.interval * nextCard.easeFactor * 1.3)); nextCard.interval = days;
+      const nextReps = nextCard.reps + 1;
+      // The second successful review has a fixed 6-day Good interval. Easy must
+      // be later than that too, rather than being calculated from the old 1-day interval.
+      const goodDays = nextReps === 2
+        ? 6
+        : Math.max(1, Math.round(nextCard.interval * nextCard.easeFactor));
+      nextCard.reps = nextReps;
+      nextCard.easeFactor = +(nextCard.easeFactor + 0.15).toFixed(2);
+      days = Math.max(goodDays + 1, Math.round(nextCard.interval * nextCard.easeFactor * 1.3));
+      nextCard.interval = days;
     }
   }
 
