@@ -15,8 +15,10 @@ function loadDecks(){
     const data = parsed.filter(deck=>deck && typeof deck === 'object');
     let changed = data.length !== parsed.length;
     // migrate older Spanish field names to English keys
-    data.forEach(deck=>{
+    data.forEach((deck, index)=>{
       if(deck){
+        if(deck.id === undefined || deck.id === null){ deck.id = `migrated-${Date.now()}-${index}`; changed = true; }
+        else if(typeof deck.id !== 'string'){ deck.id = String(deck.id); changed = true; }
         if(!Array.isArray(deck.cards)){ deck.cards = []; changed = true; }
         const validCards = deck.cards.filter(card=>card && typeof card === 'object');
         if(validCards.length !== deck.cards.length){ deck.cards = validCards; changed = true; }
@@ -51,6 +53,7 @@ function loadDecks(){
   }catch(e){return []}
 }
 function saveDecks(decks){ localStorage.setItem(STORAGE_KEY, JSON.stringify(decks)); }
+function findDeck(decks, deckId){ return decks.find(deck=>String(deck.id) === String(deckId)); }
 
 function createDeck(name){
   const decks=loadDecks();
@@ -60,7 +63,7 @@ function createDeck(name){
 
 function addCardToDeck(deckId, question, answer){
   const decks=loadDecks();
-  const deck=decks.find(d=>d.id===deckId); if(!deck) return null;
+  const deck=findDeck(decks, deckId); if(!deck) return null;
   const card={
     id:Date.now().toString()+Math.random().toString(36).slice(2,6),
     question:question,
@@ -247,7 +250,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   // save deck metadata
   const saveDeckBtn = $('save-deck'); if(saveDeckBtn){ saveDeckBtn.addEventListener('click', ()=>{
     const nameInput = $('detail-deck-name-input'); if(!nameInput) return; const newName = nameInput.value.trim(); if(!newName){ showToast('Deck name required'); return; }
-    const decks = loadDecks(); const deck = decks.find(d=>d.id===currentDeckId); if(!deck) return; deck.name = newName; saveDecks(decks); renderDeckDetail(currentDeckId); renderDecks(); showToast('Deck saved');
+    const decks = loadDecks(); const deck = findDeck(decks, currentDeckId); if(!deck) return; deck.name = newName; saveDecks(decks); renderDeckDetail(currentDeckId); renderDecks(); showToast('Deck saved');
     // close detail view after saving (save implies close)
     closeDeckDetail();
   }); }
@@ -292,7 +295,7 @@ function openDeckDetail(deckId){
     // debug info to help diagnose missing deck rendering
     const decks = loadDecks();
     if(!Array.isArray(decks) || decks.length===0){ showError('No decks loaded from storage.'); }
-    const deckExists = decks.some(d=>d.id===deckId);
+    const deckExists = Boolean(findDeck(decks, deckId));
     renderDeckDetail(deckId);
     if(!deckExists){ const ids = decks.map(d=>d.id).slice(0,10).join(','); showError(`Deck not found: ${deckId}. Loaded decks: ${ids}`); }
        $('deck-detail').classList.remove('hidden');
@@ -303,7 +306,7 @@ function openDeckDetail(deckId){
 }
 
 function renderDeckDetail(deckId){
-  const decks = loadDecks(); const deck = decks.find(d=>d.id===deckId);
+  const decks = loadDecks(); const deck = findDeck(decks, deckId);
   const list = $('deck-cards-list');
   if(!deck){ if(list) list.innerHTML = '<div class="card">Deck not found.</div>'; return; }
   // populate editable name input and show deck-only details
@@ -338,25 +341,25 @@ function renderDeckDetail(deckId){
 }
 
 function openEditCardForm(cardId){
-  const decks = loadDecks(); const deck = decks.find(d=>d.id===currentDeckId); if(!deck) return;
+  const decks = loadDecks(); const deck = findDeck(decks, currentDeckId); if(!deck) return;
   const card = deck.cards.find(c=>c.id===cardId); if(!card) return;
   $('new-card-question').value = card.question; $('new-card-answer').value = card.answer; $('save-card').dataset.editId = cardId; $('add-card-title').textContent='EDIT CARD'; $('add-card-form').classList.remove('hidden');
   const saveBtn = $('save-card'); if(saveBtn) saveBtn.textContent = 'Save';
 }
 
 function updateCard(deckId, cardId, question, answer){
-  const decks = loadDecks(); const deck = decks.find(d=>d.id===deckId); if(!deck) return;
+  const decks = loadDecks(); const deck = findDeck(decks, deckId); if(!deck) return;
   const idx = deck.cards.findIndex(c=>c.id===cardId); if(idx<0) return;
   deck.cards[idx].question = question; deck.cards[idx].answer = answer; saveDecks(decks);
 }
 
 function deleteCard(deckId, cardId){
-  const decks = loadDecks(); const deck = decks.find(d=>d.id===deckId); if(!deck) return;
+  const decks = loadDecks(); const deck = findDeck(decks, deckId); if(!deck) return;
   deck.cards = deck.cards.filter(c=>c.id!==cardId); saveDecks(decks);
 }
 
 function startStudy(deckId){
-  const decks = loadDecks(); const deck = decks.find(d=>d.id===deckId); if(!deck) return;
+  const decks = loadDecks(); const deck = findDeck(decks, deckId); if(!deck) return;
   const due = getDueCards(deck);
   if(due.length===0){ showToast('No cards due today in this deck.'); return; }
   currentDeckId = deckId; studyQueue = due; currentIndex = 0;
@@ -404,7 +407,7 @@ function handleEvaluation(evType){
   const card = studyQueue[currentIndex]; if(!card) return;
   scheduleCard(card, evType);
   // persist update
-  const decks = loadDecks(); const deck = decks.find(d=>d.id===currentDeckId); if(deck){
+  const decks = loadDecks(); const deck = findDeck(decks, currentDeckId); if(deck){
     const idx = deck.cards.findIndex(c=>c.id===card.id); if(idx>=0) deck.cards[idx]=card; saveDecks(decks);
   }
   // next
