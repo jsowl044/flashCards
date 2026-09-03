@@ -108,6 +108,8 @@ function getDueCards(deck){
 }
 
 /* Scheduling. The same calculation powers the buttons and the saved card. */
+function roundInterval(days){ return Math.max(1, Math.round(days * 10) / 10); }
+
 function calculateSchedule(card, evaluation, now=new Date()){
   const nextCard = {
     ...card,
@@ -138,10 +140,10 @@ function calculateSchedule(card, evaluation, now=new Date()){
     if(evaluation === 'again'){
       minutes = 1; nextCard.reps = 0; nextCard.interval = 0; nextCard.easeFactor = Math.max(1.3, +(nextCard.easeFactor - 0.20).toFixed(2)); nextCard.state = 'LEARNING';
     } else if(evaluation === 'hard'){
-      days = Math.max(1, Math.round(nextCard.interval * 1.2)); nextCard.easeFactor = Math.max(1.3, +(nextCard.easeFactor - 0.15).toFixed(2)); nextCard.interval = days;
+      days = roundInterval(nextCard.interval * 1.2); nextCard.easeFactor = Math.max(1.3, +(nextCard.easeFactor - 0.15).toFixed(2)); nextCard.interval = days;
     } else if(evaluation === 'good'){
       nextCard.reps += 1;
-      days = nextCard.reps === 2 ? 6 : Math.max(1, Math.round(nextCard.interval * nextCard.easeFactor));
+      days = nextCard.reps === 2 ? 6 : roundInterval(nextCard.interval * nextCard.easeFactor);
       nextCard.interval = days;
     } else if(evaluation === 'easy'){
       const nextReps = nextCard.reps + 1;
@@ -149,16 +151,16 @@ function calculateSchedule(card, evaluation, now=new Date()){
       // be later than that too, rather than being calculated from the old 1-day interval.
       const goodDays = nextReps === 2
         ? 6
-        : Math.max(1, Math.round(nextCard.interval * nextCard.easeFactor));
+        : roundInterval(nextCard.interval * nextCard.easeFactor);
       nextCard.reps = nextReps;
       nextCard.easeFactor = +(nextCard.easeFactor + 0.15).toFixed(2);
-      days = Math.max(goodDays + 1, Math.round(nextCard.interval * nextCard.easeFactor * 1.3));
+      days = Math.max(goodDays + 0.1, roundInterval(nextCard.interval * nextCard.easeFactor * 1.3));
       nextCard.interval = days;
     }
   }
 
   if(minutes !== null) next.setTime(now.getTime() + minutes * 60 * 1000);
-  else { next.setHours(0,0,0,0); next.setDate(next.getDate() + days); }
+  else next.setTime(now.getTime() + days * 24 * 60 * 60 * 1000);
   nextCard.lastEvaluation = evaluation;
   nextCard.nextReview = next.toISOString();
   return { card: nextCard, minutes: minutes === null ? days * 1440 : minutes, days: days === null ? Math.round(minutes / 1440) : days };
@@ -211,18 +213,19 @@ function computeNextDueInfo(deck){
   if(diffMinutes <= 0) return 'now';
   if(diffMinutes < 60) return `in ${diffMinutes} min`;
   if(diffMinutes < 1440){ const hrs = Math.round(diffMinutes/60); return `in ${hrs} h`; }
-  const days = Math.round(diffMinutes/1440);
+  const days = Math.round(diffMinutes / 144) / 10;
   if(days===1) return 'tomorrow';
   return `${days} days`;
 }
 
 function projectedSchedule(card, evaluation){
   const schedule = calculateSchedule(card, evaluation);
+  const displayDays = Math.round(schedule.minutes / 144) / 10;
   const human = schedule.minutes < 60
     ? `${schedule.minutes} min`
-    : schedule.minutes % 1440 === 0
-      ? `${schedule.minutes / 1440} day${schedule.minutes / 1440 === 1 ? '' : 's'}`
-      : `${Math.round(schedule.minutes / 60)} h`;
+    : schedule.minutes < 1440
+      ? `${Math.round(schedule.minutes / 60)} h`
+      : `${displayDays} day${displayDays === 1 ? '' : 's'}`;
   return {...schedule, human};
 }
 
