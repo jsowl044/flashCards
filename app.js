@@ -80,8 +80,9 @@ function scheduleCard(card, evaluation){
   card.easeFactor = Number(card.easeFactor || 2.5);
   card.reps = Number(card.reps || 0);
   card.interval = Number(card.interval || 0);
+  const next = new Date();
   // Decide if card is in learning mode (use minute-level scheduling) or review mode (days)
-  const inLearning = (card.reps === 0) || (card.state === 'LEARNING') || (card.interval === 0);
+  const inLearning = (card.state === 'LEARNING' || !card.state) || (card.interval === 0);
 
   if(inLearning){
     // minute-based learning schedule (preserve prior behavior)
@@ -114,24 +115,21 @@ function scheduleCard(card, evaluation){
       card.state = 'REVIEW';
     }
 
-    card.lastEvaluation = evaluation;
     // update interval in days (rounded down) but keep precise nextReview in minutes
     card.interval = Math.round(minutes / 1440);
-    const next = new Date(Date.now() + minutes * 60 * 1000);
-    card.nextReview = next.toISOString();
-    return;
+    next.setTime(Date.now() + minutes * 60 * 1000);
   }
-
-  // Review mode: use SM-2 days-based updates
-  if(evaluation === 'again'){
+  else {
+    // Review mode: use SM-2 days-based updates
+    if(evaluation === 'again'){
     card.reps = 0;
-    card.interval = 1;
+    card.interval = 0;
     card.easeFactor = Math.max(1.3, +(card.easeFactor - 0.20).toFixed(2));
     card.state = 'LEARNING';
   } else if(evaluation === 'hard'){
     card.easeFactor = Math.max(1.3, +(card.easeFactor - 0.15).toFixed(2));
     card.interval = Math.max(1, Math.round(card.interval * 1.2));
-    card.state = 'LEARNING';
+    card.state = 'REVIEW';
   } else if(evaluation === 'good'){
     card.reps = card.reps + 1;
     if(card.reps === 1){
@@ -148,9 +146,9 @@ function scheduleCard(card, evaluation){
     card.interval = Math.max(1, Math.round(card.interval * card.easeFactor * 1.3));
     card.state = 'REVIEW';
   }
-
+  next.setHours(0,0,0,0); next.setDate(next.getDate() + Number(card.interval || 0));
+}
   card.lastEvaluation = evaluation;
-  const next = new Date(); next.setHours(0,0,0,0); next.setDate(next.getDate() + Number(card.interval || 0));
   card.nextReview = next.toISOString();
 }
 
