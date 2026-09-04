@@ -236,9 +236,21 @@ function projectedSchedule(card, evaluation){
 
 function escapeHtml(s){ return (s||'').toString().replace(/[&<>"']/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[c])) }
 
+function refreshDecksIfIdle(){
+  const decksView = $('decks-view');
+  const detail = $('deck-detail');
+  const newDeckForm = $('new-deck-form');
+  // Avoid replacing the DOM while the user is typing or managing a deck.
+  if(decksView && !decksView.classList.contains('hidden') && detail.classList.contains('hidden') && newDeckForm.classList.contains('hidden')){
+    renderDecks();
+  }
+}
+
 /* Events */
 document.addEventListener('DOMContentLoaded', ()=>{
   renderDecks();
+  window.setInterval(refreshDecksIfIdle, 30000);
+  window.addEventListener('storage', (event)=>{ if(event.key === STORAGE_KEY) refreshDecksIfIdle(); });
   // apply theme according to OS preference (light/dark)
   try{
     const applyTheme = (dark)=> document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
