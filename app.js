@@ -178,6 +178,7 @@ function scheduleCard(card, evaluation){ Object.assign(card, calculateSchedule(c
 let currentDeckId = null;
 let studyQueue = [];
 let currentIndex = 0;
+let studyDeckName = '';
 
 function showError(msg){ try{ const el=$('app-errors'); if(el){ el.textContent = msg; el.classList.remove('hidden'); } }catch(e){} console.error(msg); }
 window.addEventListener('error', (e)=>{ showError(`${e.message} at ${e.filename||e.fileName}:${e.lineno||e.lineNumber}`); });
@@ -431,13 +432,18 @@ function startStudy(deckId){
   const decks = loadDecks(); const deck = findDeck(decks, deckId); if(!deck) return;
   const due = getDueCards(deck);
   if(due.length===0){ showToast('No cards due today in this deck.'); return; }
-  currentDeckId = deckId; studyQueue = due; currentIndex = 0;
-  $('study-deck-title').textContent = deck.name + ` — ${due.length} due`;
+  currentDeckId = deckId; studyQueue = due; currentIndex = 0; studyDeckName = deck.name;
   $('decks-view').classList.add('hidden'); $('study-view').classList.remove('hidden'); showCurrentCard();
+}
+
+function updateStudyProgress(){
+  const remaining = Math.max(0, studyQueue.length - currentIndex);
+  $('study-deck-title').textContent = `${studyDeckName} — ${remaining} card${remaining === 1 ? '' : 's'} left`;
 }
 
 function showCurrentCard(){
   const card = studyQueue[currentIndex]; if(!card) return finishStudy();
+  updateStudyProgress();
   $('card-question').textContent = card.question;
   $('card-answer').textContent = card.answer;
   $('card-answer').classList.add('hidden');
