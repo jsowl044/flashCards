@@ -23,8 +23,7 @@
 *{box-sizing:border-box}
 html,body{height:100%;margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,'Helvetica Neue',Arial}
 body{background:linear-gradient(180deg,#071124 0%, #081424 100%);color:#e6eef8;display:flex;flex-direction:column;align-items:stretch}
-.app-root{
-}
+
 /* Use theme variables for background and text */
 body{background: var(--bg); color: var(--text); background-image: none;}
 .app-header{position:sticky;top:0;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);padding:calc(12px + env(safe-area-inset-top)) 16px 12px;text-align:center;z-index:10}
