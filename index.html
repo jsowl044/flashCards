@@ -36,7 +36,7 @@
       </div>
 
       <div id="deck-detail" class="card hidden">
-        <div class="deck-detail-header">
+          <div class="deck-detail-header">
             <div style="display: flex; align-items: center; gap: 8px;">
                 <input id="detail-deck-name-input" placeholder="Deck name" style="flex: 1;" />
                 <button id="detail-edit-name" class="btn icon" aria-label="Edit name">✏️</button>
@@ -44,6 +44,7 @@
             <div id="detail-deck-meta" class="deck-meta" style="margin-top:6px;color:var(--muted)"></div>
             <div class="row" style="margin-top: 8px;"><button id="save-deck" class="btn primary">Save</button><button id="detail-add-card" class="btn primary">Add Card</button><button id="close-detail" class="btn">Close</button></div>
         </div>
+        <input id="card-search" type="search" placeholder="Search question or answer" aria-label="Search cards" autocomplete="off" />
         <div id="add-card-form" class="card hidden">
           <h2 id="add-card-title">ADD CARD</h2>
           <input id="new-card-question" placeholder="Question / Word" />

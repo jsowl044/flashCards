@@ -159,7 +159,8 @@ function calculateSchedule(card, evaluation, now=new Date()){
         : roundInterval(nextCard.interval * nextCard.easeFactor);
       nextCard.reps = nextReps;
       nextCard.easeFactor = +(nextCard.easeFactor + 0.15).toFixed(2);
-      days = Math.max(goodDays + 0.1, roundInterval(nextCard.interval * nextCard.easeFactor * 1.3));
+      // Easy is meaningfully later than Good, including on the initial 6-day review.
+      days = Math.max(roundInterval(goodDays * 1.3), roundInterval(nextCard.interval * nextCard.easeFactor * 1.3));
       nextCard.interval = days;
     }
   }
@@ -298,6 +299,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   $('close-detail').addEventListener('click', closeDeckDetail);
   $('detail-add-card').addEventListener('click', ()=>{ openAddCardForm(currentDeckId); });
   $('detail-edit-name').addEventListener('click', ()=>{ const input = $('detail-deck-name-input'); input.removeAttribute('disabled'); input.focus(); });
+  $('card-search').addEventListener('input', ()=>{ if(currentDeckId && !$('deck-detail').classList.contains('hidden')) renderDeckDetail(currentDeckId); });
   // save deck metadata
   const saveDeckBtn = $('save-deck'); if(saveDeckBtn){ saveDeckBtn.addEventListener('click', ()=>{
     const nameInput = $('detail-deck-name-input'); if(!nameInput) return; const newName = nameInput.value.trim(); if(!newName){ showToast('Deck name required'); return; }
@@ -324,11 +326,23 @@ document.addEventListener('DOMContentLoaded', ()=>{
   });
 });
 
-function openAddCardForm(deckId){ currentDeckId = deckId; clearCardForm(); $('add-card-form').classList.remove('hidden'); }
+function focusCardForm(){
+  const form = $('add-card-form');
+  const question = $('new-card-question');
+  requestAnimationFrame(()=>{
+    form.scrollIntoView({behavior:'smooth', block:'center'});
+    setTimeout(()=>{
+      try{ question.focus({preventScroll:true}); }catch(e){ question.focus(); }
+    }, 250);
+  });
+}
+
+function openAddCardForm(deckId){ currentDeckId = deckId; clearCardForm(); $('add-card-form').classList.remove('hidden'); focusCardForm(); }
 
 function closeDeckDetail(){
   $('add-card-form').classList.add('hidden');
   clearCardForm();
+  $('card-search').value = '';
   $('deck-detail').classList.add('hidden');
   $('decks-list').classList.remove('hidden');
   document.querySelector('#decks-view .controls').classList.remove('hidden');
@@ -362,11 +376,15 @@ function renderDeckDetail(deckId){
   if(!deck){ if(list) list.innerHTML = '<div class="card">Deck not found.</div>'; return; }
   // populate editable name input and show deck-only details
   const nameInput = $('detail-deck-name-input'); if(nameInput){ nameInput.value = deck.name; nameInput.setAttribute('disabled','true'); }
-  const meta = $('detail-deck-meta'); if(meta) meta.textContent = `${deck.cards.length} cards`;
+  const search = $('card-search').value.trim().toLocaleLowerCase();
+  const visibleCards = search
+    ? deck.cards.filter(card=>`${card.question || ''} ${card.answer || ''}`.toLocaleLowerCase().includes(search))
+    : deck.cards;
+  const meta = $('detail-deck-meta'); if(meta) meta.textContent = search ? `${deck.cards.length} cards · ${visibleCards.length} shown` : `${deck.cards.length} cards`;
   const closeBtn = $('close-detail'); if(closeBtn){ closeBtn.classList.remove('hidden'); }
   list.innerHTML='';
-  if(deck.cards.length===0){ list.innerHTML='<div class="card">No cards in this deck.</div>'; return; }
-  deck.cards.forEach(card=>{
+  if(visibleCards.length===0){ list.innerHTML=`<div class="card">${search ? 'No matching cards.' : 'No cards in this deck.'}</div>`; return; }
+  visibleCards.forEach(card=>{
     const el = document.createElement('div'); el.className='card deck-item';
     el.innerHTML = `<div style="flex:1"><strong>${escapeHtml(card.question)}</strong><div class="deck-meta">${escapeHtml(card.answer)}</div></div>
       <div style="display:flex;flex-direction:column;gap:6px"><button class="btn" data-action="edit" data-id="${card.id}">Edit</button><button class="btn" data-action="delete" data-id="${card.id}">Delete</button></div>`;
@@ -394,7 +412,7 @@ function renderDeckDetail(deckId){
 function openEditCardForm(cardId){
   const decks = loadDecks(); const deck = findDeck(decks, currentDeckId); if(!deck) return;
   const card = deck.cards.find(c=>c.id===cardId); if(!card) return;
-  $('new-card-question').value = card.question; $('new-card-answer').value = card.answer; $('save-card').dataset.editId = cardId; $('add-card-title').textContent='EDIT CARD'; $('add-card-form').classList.remove('hidden');
+  $('new-card-question').value = card.question; $('new-card-answer').value = card.answer; $('save-card').dataset.editId = cardId; $('add-card-title').textContent='EDIT CARD'; $('add-card-form').classList.remove('hidden'); focusCardForm();
   const saveBtn = $('save-card'); if(saveBtn) saveBtn.textContent = 'Save';
 }
 
