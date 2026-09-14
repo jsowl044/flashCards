@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="icons/icon.svg">
-  <link rel="stylesheet" href="style.css?v=8">
+  <link rel="stylesheet" href="style.css?v=9">
   <title>Flashcards PWA</title>
 </head>
 <body>
@@ -56,17 +56,13 @@
 
       <div id="deck-detail" class="card hidden">
           <div class="deck-detail-header">
-            <div style="display: flex; align-items: center; gap: 8px;">
+            <button id="deck-detail-back" class="btn back-btn" aria-label="Back to decks">← Back</button>
+            <div style="display: flex; align-items: center; gap: 8px; margin-top: 6px;">
                 <input id="detail-deck-name-input" placeholder="Deck name" style="flex: 1;" />
                 <button id="detail-edit-name" class="btn icon" aria-label="Edit name">✏️</button>
             </div>
             <div id="detail-deck-meta" class="deck-meta" style="margin-top:6px;color:var(--muted)"></div>
-            <div class="row" style="margin-top: 8px;"><button id="save-deck" class="btn primary">Save</button><button id="detail-add-card" class="btn primary">Add Card</button><button id="close-detail" class="btn">Close</button></div>
             <div class="row" style="margin-top: 8px;"><button id="delete-deck" class="btn danger">Delete Deck</button></div>
-        </div>
-        <div class="search-wrap">
-          <input id="card-search" type="search" placeholder="Search question or answer" aria-label="Search cards" autocomplete="off" />
-          <button id="card-search-clear" class="search-clear hidden" aria-label="Clear search" type="button">&times;</button>
         </div>
         <div id="add-card-form" class="card hidden">
           <h2 id="add-card-title">ADD CARD</h2>
@@ -78,6 +74,15 @@
           </div>
         </div>
         <div id="deck-cards-list"></div>
+        <div id="deck-bottom-bar" class="deck-bottom-bar">
+          <div class="deck-bottom-bar-inner">
+            <div class="search-wrap">
+              <input id="card-search" type="search" placeholder="Search question or answer" aria-label="Search cards" autocomplete="off" />
+              <button id="card-search-clear" class="search-clear hidden" aria-label="Clear search" type="button">&times;</button>
+            </div>
+            <button id="detail-add-card" class="btn primary add-card-fab" aria-label="Add card" title="Add card">+</button>
+          </div>
+        </div>
       </div>
     </section>
 

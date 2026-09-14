@@ -321,6 +321,21 @@ document.addEventListener('DOMContentLoaded', ()=>{
   }catch(e){/* ignore */}
   // ensure evaluation buttons are hidden initially
   const evalEl = $('evaluation'); if(evalEl) evalEl.classList.add('hidden');
+  // Keep the fixed search bar pinned just above the on-screen keyboard: iOS Safari
+  // doesn't reflow position:fixed elements when the keyboard opens, so we shift it
+  // by however much the visual viewport has shrunk.
+  try{
+    const bottomBar = $('deck-bottom-bar');
+    if(bottomBar && window.visualViewport){
+      const reposition = ()=>{
+        const vv = window.visualViewport;
+        const offset = window.innerHeight - vv.height - vv.offsetTop;
+        bottomBar.style.transform = offset > 1 ? `translateY(-${offset}px)` : '';
+      };
+      window.visualViewport.addEventListener('resize', reposition);
+      window.visualViewport.addEventListener('scroll', reposition);
+    }
+  }catch(e){/* ignore */}
   // quick check: ensure style.css loads; if not, show instruction
   // remove previous cache helper; rely on SW activation to manage caches
   // buttons
@@ -369,7 +384,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   });
 
   // deck detail controls
-  $('close-detail').addEventListener('click', closeDeckDetail);
+  $('deck-detail-back').addEventListener('click', closeDeckDetail);
   $('detail-add-card').addEventListener('click', ()=>{ openAddCardForm(currentDeckId); });
   const deleteDeckBtn = $('delete-deck');
   if(deleteDeckBtn){
@@ -388,6 +403,9 @@ document.addEventListener('DOMContentLoaded', ()=>{
     });
   }
   $('detail-edit-name').addEventListener('click', ()=>{ const input = $('detail-deck-name-input'); input.removeAttribute('disabled'); input.focus(); });
+  const nameInput = $('detail-deck-name-input');
+  nameInput.addEventListener('blur', saveDeckNameIfChanged);
+  nameInput.addEventListener('keydown', (ev)=>{ if(ev.key === 'Enter'){ ev.preventDefault(); nameInput.blur(); } });
   const searchInput = $('card-search'); const searchClearBtn = $('card-search-clear');
   searchInput.addEventListener('input', ()=>{
     searchClearBtn.classList.toggle('hidden', !searchInput.value);
@@ -399,14 +417,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
     searchInput.focus();
     if(currentDeckId && !$('deck-detail').classList.contains('hidden')) renderDeckDetail(currentDeckId);
   });
-  // save deck metadata
-  const saveDeckBtn = $('save-deck'); if(saveDeckBtn){ saveDeckBtn.addEventListener('click', ()=>{
-    const nameInput = $('detail-deck-name-input'); if(!nameInput) return; const newName = nameInput.value.trim(); if(!newName){ showToast('Deck name required'); return; }
-    const decks = loadDecks(); const deck = findDeck(decks, currentDeckId); if(!deck) return; deck.name = newName; saveDecks(decks); renderDeckDetail(currentDeckId); renderDecks(); showToast('Deck saved');
-    // close detail view after saving (save implies close)
-    closeDeckDetail();
-  }); }
-
   // study view
   $('back-to-decks').addEventListener('click', ()=>{ stopStudyPolling(); $('study-view').classList.add('hidden'); $('decks-view').classList.remove('hidden'); renderDecks(); });
   $('show-answer').addEventListener('click', ()=>{ revealAnswer(); });
@@ -438,7 +448,19 @@ function focusCardForm(){
 
 function openAddCardForm(deckId){ currentDeckId = deckId; clearCardForm(); $('add-card-form').classList.remove('hidden'); focusCardForm(); }
 
+// Cards save as soon as you edit them; the deck name should behave the same way
+// instead of needing a separate Save button the user can forget to press.
+function saveDeckNameIfChanged(){
+  const nameInput = $('detail-deck-name-input'); if(!nameInput || nameInput.hasAttribute('disabled')) return;
+  const newName = nameInput.value.trim();
+  nameInput.setAttribute('disabled', 'true');
+  if(!currentDeckId || !newName) return;
+  const decks = loadDecks(); const deck = findDeck(decks, currentDeckId); if(!deck) return;
+  if(deck.name !== newName){ deck.name = newName; saveDecks(decks); renderDecks(); }
+}
+
 function closeDeckDetail(){
+  saveDeckNameIfChanged();
   $('add-card-form').classList.add('hidden');
   clearCardForm();
   $('card-search').value = '';
@@ -481,7 +503,6 @@ function renderDeckDetail(deckId){
     ? deck.cards.filter(card=>`${card.question || ''} ${card.answer || ''}`.toLocaleLowerCase().includes(search))
     : deck.cards;
   const meta = $('detail-deck-meta'); if(meta) meta.textContent = search ? `${deck.cards.length} cards · ${visibleCards.length} shown` : `${deck.cards.length} cards`;
-  const closeBtn = $('close-detail'); if(closeBtn){ closeBtn.classList.remove('hidden'); }
   list.innerHTML='';
   if(visibleCards.length===0){ list.innerHTML=`<div class="card">${search ? 'No matching cards.' : 'No cards in this deck.'}</div>`; return; }
   visibleCards.forEach(card=>{
