@@ -151,9 +151,17 @@ function addCardToDeck(deckId, question, answer){
   deck.cards.push(card); saveDecks(decks); return card;
 }
 
+// Longer-interval (more mature) cards first, descending down to the shortest-cooldown
+// learning cards; ties broken by how long a card has been overdue (most overdue first).
+function compareByCooldown(a, b){
+  const diff = Number(b.interval || 0) - Number(a.interval || 0);
+  if(diff !== 0) return diff;
+  return (a.nextReview || '').localeCompare(b.nextReview || '');
+}
+
 function getDueCards(deck){
   const nowISO = new Date().toISOString();
-  return (deck.cards || []).filter(c=>c && c.nextReview <= nowISO).sort((a,b)=>a.nextReview.localeCompare(b.nextReview));
+  return (deck.cards || []).filter(c=>c && c.nextReview <= nowISO).sort(compareByCooldown);
 }
 
 /* Scheduling. The same calculation powers the buttons and the saved card. */
@@ -228,6 +236,7 @@ let currentDeckId = null;
 let studyQueue = [];
 let currentIndex = 0;
 let studyDeckName = '';
+let studyPollTimer = null;
 
 function showError(msg){ try{ const el=$('app-errors'); if(el){ el.textContent = msg; el.classList.remove('hidden'); } }catch(e){} console.error(msg); }
 window.addEventListener('error', (e)=>{ showError(`${e.message} at ${e.filename||e.fileName}:${e.lineno||e.lineNumber}`); });
@@ -389,7 +398,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   }); }
 
   // study view
-  $('back-to-decks').addEventListener('click', ()=>{ $('study-view').classList.add('hidden'); $('decks-view').classList.remove('hidden'); renderDecks(); });
+  $('back-to-decks').addEventListener('click', ()=>{ stopStudyPolling(); $('study-view').classList.add('hidden'); $('decks-view').classList.remove('hidden'); renderDecks(); });
   $('show-answer').addEventListener('click', ()=>{ revealAnswer(); });
 
   const ta = $('typed-answer');
@@ -513,6 +522,34 @@ function startStudy(deckId){
   if(due.length===0){ showToast('No cards due today in this deck.'); return; }
   currentDeckId = deckId; studyQueue = due; currentIndex = 0; studyDeckName = deck.name;
   $('decks-view').classList.add('hidden'); $('study-view').classList.remove('hidden'); showCurrentCard();
+  startStudyPolling();
+}
+
+// Pulls in cards whose cooldown expires while the session is still open — either
+// cards that weren't due yet when the session started, or ones just evaluated
+// Again/Hard whose short relearning step has already elapsed — instead of making
+// the user reopen the deck to see them.
+function startStudyPolling(){
+  stopStudyPolling();
+  studyPollTimer = window.setInterval(pollForNewlyDueCards, 5000);
+}
+
+function stopStudyPolling(){
+  if(studyPollTimer){ window.clearInterval(studyPollTimer); studyPollTimer = null; }
+}
+
+function pollForNewlyDueCards(){
+  if(!currentDeckId || $('study-view').classList.contains('hidden')) return;
+  const decks = loadDecks(); const deck = findDeck(decks, currentDeckId); if(!deck) return;
+  const nowISO = new Date().toISOString();
+  // Never touches index <= currentIndex, so the card currently on screen can't be swapped
+  // out from under an in-progress answer.
+  const remainingIds = new Set(studyQueue.slice(currentIndex).map(c=>c.id));
+  const newlyDue = (deck.cards || []).filter(c=>c && c.nextReview <= nowISO && !remainingIds.has(c.id));
+  if(newlyDue.length === 0) return;
+  const tail = studyQueue.slice(currentIndex + 1).concat(newlyDue).sort(compareByCooldown);
+  studyQueue = studyQueue.slice(0, currentIndex + 1).concat(tail);
+  updateStudyProgress();
 }
 
 function updateStudyProgress(){
@@ -569,5 +606,6 @@ function handleEvaluation(evType){
 }
 
 function finishStudy(){
+  stopStudyPolling();
   $('study-view').classList.add('hidden'); $('decks-view').classList.remove('hidden'); renderDecks();
 }
