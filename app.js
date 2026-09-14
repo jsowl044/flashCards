@@ -371,7 +371,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   });
 
   // add / edit card form
-  $('cancel-card').addEventListener('click', ()=>{ $('add-card-form').classList.add('hidden'); clearCardForm(); });
+  $('cancel-card').addEventListener('click', ()=>{ setAddCardFormVisible(false); clearCardForm(); });
   $('save-card').addEventListener('click', ()=>{
     const q=$('new-card-question').value.trim(); const a=$('new-card-answer').value.trim(); if(!q||!a){ showToast('Question and answer required'); return; }
     const editId = $('save-card').dataset.editId;
@@ -380,7 +380,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     } else {
       addCardToDeck(currentDeckId,q,a);
     }
-    clearCardForm(); $('add-card-form').classList.add('hidden'); renderDecks(); if(document.getElementById('deck-detail') && !document.getElementById('deck-detail').classList.contains('hidden')) renderDeckDetail(currentDeckId);
+    clearCardForm(); setAddCardFormVisible(false); renderDecks(); if(document.getElementById('deck-detail') && !document.getElementById('deck-detail').classList.contains('hidden')) renderDeckDetail(currentDeckId);
   });
 
   // deck detail controls
@@ -446,7 +446,14 @@ function focusCardForm(){
   });
 }
 
-function openAddCardForm(deckId){ currentDeckId = deckId; clearCardForm(); $('add-card-form').classList.remove('hidden'); focusCardForm(); }
+// The add/edit form and the docked search+add bar occupy the same bottom area,
+// so only one of them should be visible at a time.
+function setAddCardFormVisible(visible){
+  $('add-card-form').classList.toggle('hidden', !visible);
+  const bar = $('deck-bottom-bar'); if(bar) bar.classList.toggle('hidden', visible);
+}
+
+function openAddCardForm(deckId){ currentDeckId = deckId; clearCardForm(); setAddCardFormVisible(true); focusCardForm(); }
 
 // Cards save as soon as you edit them; the deck name should behave the same way
 // instead of needing a separate Save button the user can forget to press.
@@ -461,7 +468,7 @@ function saveDeckNameIfChanged(){
 
 function closeDeckDetail(){
   saveDeckNameIfChanged();
-  $('add-card-form').classList.add('hidden');
+  setAddCardFormVisible(false);
   clearCardForm();
   $('card-search').value = '';
   $('card-search-clear').classList.add('hidden');
@@ -533,7 +540,7 @@ function renderDeckDetail(deckId){
 function openEditCardForm(cardId){
   const decks = loadDecks(); const deck = findDeck(decks, currentDeckId); if(!deck) return;
   const card = deck.cards.find(c=>c.id===cardId); if(!card) return;
-  $('new-card-question').value = card.question; $('new-card-answer').value = card.answer; $('save-card').dataset.editId = cardId; $('add-card-title').textContent='EDIT CARD'; $('add-card-form').classList.remove('hidden'); focusCardForm();
+  $('new-card-question').value = card.question; $('new-card-answer').value = card.answer; $('save-card').dataset.editId = cardId; $('add-card-title').textContent='EDIT CARD'; setAddCardFormVisible(true); focusCardForm();
   const saveBtn = $('save-card'); if(saveBtn) saveBtn.textContent = 'Save';
 }
 
