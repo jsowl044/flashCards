@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="icons/icon.svg">
-  <link rel="stylesheet" href="style.css?v=6">
+  <link rel="stylesheet" href="style.css?v=8">
   <title>Flashcards PWA</title>
 </head>
 <body>
@@ -64,7 +64,10 @@
             <div class="row" style="margin-top: 8px;"><button id="save-deck" class="btn primary">Save</button><button id="detail-add-card" class="btn primary">Add Card</button><button id="close-detail" class="btn">Close</button></div>
             <div class="row" style="margin-top: 8px;"><button id="delete-deck" class="btn danger">Delete Deck</button></div>
         </div>
-        <input id="card-search" type="search" placeholder="Search question or answer" aria-label="Search cards" autocomplete="off" />
+        <div class="search-wrap">
+          <input id="card-search" type="search" placeholder="Search question or answer" aria-label="Search cards" autocomplete="off" />
+          <button id="card-search-clear" class="search-clear hidden" aria-label="Clear search" type="button">&times;</button>
+        </div>
         <div id="add-card-form" class="card hidden">
           <h2 id="add-card-title">ADD CARD</h2>
           <input id="new-card-question" placeholder="Question / Word" />

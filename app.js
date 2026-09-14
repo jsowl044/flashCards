@@ -388,7 +388,17 @@ document.addEventListener('DOMContentLoaded', ()=>{
     });
   }
   $('detail-edit-name').addEventListener('click', ()=>{ const input = $('detail-deck-name-input'); input.removeAttribute('disabled'); input.focus(); });
-  $('card-search').addEventListener('input', ()=>{ if(currentDeckId && !$('deck-detail').classList.contains('hidden')) renderDeckDetail(currentDeckId); });
+  const searchInput = $('card-search'); const searchClearBtn = $('card-search-clear');
+  searchInput.addEventListener('input', ()=>{
+    searchClearBtn.classList.toggle('hidden', !searchInput.value);
+    if(currentDeckId && !$('deck-detail').classList.contains('hidden')) renderDeckDetail(currentDeckId);
+  });
+  searchClearBtn.addEventListener('click', ()=>{
+    searchInput.value = '';
+    searchClearBtn.classList.add('hidden');
+    searchInput.focus();
+    if(currentDeckId && !$('deck-detail').classList.contains('hidden')) renderDeckDetail(currentDeckId);
+  });
   // save deck metadata
   const saveDeckBtn = $('save-deck'); if(saveDeckBtn){ saveDeckBtn.addEventListener('click', ()=>{
     const nameInput = $('detail-deck-name-input'); if(!nameInput) return; const newName = nameInput.value.trim(); if(!newName){ showToast('Deck name required'); return; }
@@ -432,6 +442,7 @@ function closeDeckDetail(){
   $('add-card-form').classList.add('hidden');
   clearCardForm();
   $('card-search').value = '';
+  $('card-search-clear').classList.add('hidden');
   $('deck-detail').classList.add('hidden');
   $('decks-list').classList.remove('hidden');
   document.querySelector('#decks-view .controls').classList.remove('hidden');
