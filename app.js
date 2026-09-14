@@ -78,10 +78,59 @@ function saveDecks(decks){
 }
 function findDeck(decks, deckId){ return decks.find(deck=>String(deck.id) === String(deckId)); }
 
+/* Export / Import (JSON backup) */
+function exportDecks(){
+  const decks = loadDecks();
+  const blob = new Blob([JSON.stringify(decks, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const stamp = new Date().toISOString().slice(0,10);
+  const a = document.createElement('a');
+  a.href = url; a.download = `flashcards-backup-${stamp}.json`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
+}
+
+// Imported decks/cards get fresh ids and are appended (never overwrite existing data).
+// loadDecks() will normalize any missing/legacy fields on the next read.
+function importDecksFromFile(file){
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    let parsed;
+    try{ parsed = JSON.parse(reader.result); }
+    catch(e){ showToast('Import failed: invalid JSON file'); return; }
+    const importedDecks = Array.isArray(parsed) ? parsed : (parsed && Array.isArray(parsed.cards) ? [parsed] : null);
+    if(!importedDecks){ showToast('Import failed: unrecognized file format'); return; }
+    const decks = loadDecks();
+    let addedDecks = 0;
+    importedDecks.forEach(deck=>{
+      if(!deck || typeof deck !== 'object') return;
+      const cards = Array.isArray(deck.cards) ? deck.cards.filter(c=>c && typeof c==='object') : [];
+      decks.push({
+        id: `imported-${Date.now()}-${Math.random().toString(36).slice(2,6)}`,
+        name: deck.name || 'Imported deck',
+        cards: cards.map(c=>({ ...c, id: `imported-${Date.now()}-${Math.random().toString(36).slice(2,8)}` }))
+      });
+      addedDecks++;
+    });
+    if(addedDecks === 0){ showToast('Import failed: no valid decks found'); return; }
+    saveDecks(decks);
+    renderDecks();
+    showToast(`Imported ${addedDecks} deck${addedDecks===1?'':'s'}`);
+  };
+  reader.onerror = ()=> showToast('Import failed: could not read file');
+  reader.readAsText(file);
+}
+
 function createDeck(name){
   const decks=loadDecks();
   const deck={id:Date.now().toString(),name,cards:[]};
   decks.push(deck); saveDecks(decks); return deck;
+}
+
+function deleteDeck(deckId){
+  const decks=loadDecks();
+  const next=decks.filter(d=>String(d.id)!==String(deckId));
+  saveDecks(next);
 }
 
 function addCardToDeck(deckId, question, answer){
@@ -216,8 +265,9 @@ function computeNextDueInfo(deck){
   const minDate = dates.reduce((a,b)=> a < b ? a : b);
   const now = new Date(); const d = new Date(minDate);
   const diffMs = d - now;
-  const diffMinutes = Math.round(diffMs / (1000*60));
-  if(diffMinutes <= 0) return 'now';
+  // Match getDueCards' exact comparison so this label never says "now" before a card is actually due.
+  if(diffMs <= 0) return 'now';
+  const diffMinutes = Math.ceil(diffMs / (1000*60));
   if(diffMinutes < 60) return `in ${diffMinutes} min`;
   if(diffMinutes < 1440){ const hrs = Math.round(diffMinutes/60); return `in ${hrs} h`; }
   const days = Math.round(diffMinutes / 144) / 10;
@@ -272,6 +322,19 @@ document.addEventListener('DOMContentLoaded', ()=>{
     createDeck(name); $('deck-name').value=''; $('new-deck-form').classList.add('hidden'); renderDecks();
   });
 
+  // export / import
+  $('export-btn').addEventListener('click', ()=>{
+    if(loadDecks().length===0){ showToast('No decks to export'); return; }
+    exportDecks();
+  });
+  const importInput = $('import-file-input');
+  $('import-btn').addEventListener('click', ()=> importInput.click());
+  importInput.addEventListener('change', ()=>{
+    const file = importInput.files && importInput.files[0];
+    if(file) importDecksFromFile(file);
+    importInput.value = '';
+  });
+
 
   // deck actions (delegation) with error surface
   document.getElementById('decks-list').addEventListener('click', (ev)=>{
@@ -299,6 +362,22 @@ document.addEventListener('DOMContentLoaded', ()=>{
   // deck detail controls
   $('close-detail').addEventListener('click', closeDeckDetail);
   $('detail-add-card').addEventListener('click', ()=>{ openAddCardForm(currentDeckId); });
+  const deleteDeckBtn = $('delete-deck');
+  if(deleteDeckBtn){
+    deleteDeckBtn.addEventListener('click', ()=>{
+      if(deleteDeckBtn.dataset.confirm==='1'){
+        deleteDeck(currentDeckId);
+        deleteDeckBtn.dataset.confirm='0';
+        deleteDeckBtn.textContent='Delete Deck';
+        closeDeckDetail();
+        showToast('Deck deleted');
+      } else {
+        deleteDeckBtn.dataset.confirm='1';
+        deleteDeckBtn.textContent='Confirm delete?';
+        setTimeout(()=>{ deleteDeckBtn.dataset.confirm='0'; deleteDeckBtn.textContent='Delete Deck'; }, 4000);
+      }
+    });
+  }
   $('detail-edit-name').addEventListener('click', ()=>{ const input = $('detail-deck-name-input'); input.removeAttribute('disabled'); input.focus(); });
   $('card-search').addEventListener('input', ()=>{ if(currentDeckId && !$('deck-detail').classList.contains('hidden')) renderDeckDetail(currentDeckId); });
   // save deck metadata
