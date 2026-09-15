@@ -8,7 +8,7 @@
 // comes from the Firestore security rules, not from hiding this config.
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
 import {
-  getAuth, GoogleAuthProvider, signInWithRedirect, getRedirectResult,
+  getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult,
   onAuthStateChanged, signOut
 } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
 import {
@@ -34,7 +34,18 @@ if(isConfigured){
   const provider = new GoogleAuthProvider();
 
   window.firebaseAuth = auth;
-  window.firebaseSignInWithRedirect = () => signInWithRedirect(auth, provider);
+  // Prefer signInWithPopup: the whole exchange happens within one page load, so it
+  // doesn't depend on storage surviving a full navigation away and back — which is
+  // exactly what iOS Safari's tracking prevention tends to break for
+  // signInWithRedirect. Fall back to redirect only if the popup itself can't open.
+  window.firebaseSignIn = () => signInWithPopup(auth, provider).catch(e=>{
+    // Only fall back when the popup mechanism itself isn't usable — not when the
+    // user just closed it (that should stay a no-op they can retry).
+    if(e && (e.code === 'auth/popup-blocked' || e.code === 'auth/operation-not-supported-in-this-environment')){
+      return signInWithRedirect(auth, provider);
+    }
+    throw e;
+  });
   window.firebaseGetRedirectResult = () => getRedirectResult(auth);
   window.firebaseOnAuthStateChanged = (cb) => onAuthStateChanged(auth, cb);
   window.firebaseSignOut = () => signOut(auth);

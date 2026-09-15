@@ -399,7 +399,11 @@ document.addEventListener('DOMContentLoaded', ()=>{
         if(cloudUser){ window.firebaseSignOut(); return; }
         const hasLocalCards = loadDecks().some(d=>d.cards && d.cards.length);
         if(hasLocalCards && !confirm('Signing in syncs this device with your cloud data. If you already synced from another device, this device\'s local cards may get replaced by the cloud copy. Continue?')) return;
-        window.firebaseSignInWithRedirect();
+        window.firebaseSignIn().catch(e=>{
+          if(e && e.code === 'auth/popup-closed-by-user') return;
+          showToast('Sign-in failed: ' + (e && e.message ? e.message : e));
+          console.warn('Sign-in error:', e);
+        });
       });
     }
   }catch(e){/* ignore */}
