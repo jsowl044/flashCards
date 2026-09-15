@@ -30,7 +30,10 @@ body{background:var(--bg);color:var(--text);display:flex;flex-direction:column;a
 .header-row{display:flex;align-items:center;justify-content:center;position:relative}
 .header-actions{position:absolute;right:0;top:50%;transform:translateY(-50%);display:flex;gap:2px}
 .header-actions .btn.icon{display:flex;align-items:center;justify-content:center;width:38px;height:38px;padding:0}
+.header-actions .btn.icon.hidden{display:none}
 .header-actions .btn.icon svg{display:block}
+#sync-btn.synced{color:var(--accent)}
+#sync-btn.synced svg{fill:var(--accent);fill-opacity:0.18}
 main{padding:12px;flex:1;max-width:540px;margin:0 auto;width:100%}
 .controls{position:fixed;right:16px;bottom:calc(16px + env(safe-area-inset-bottom));z-index:20;margin:0}
 .controls .primary{box-shadow:0 8px 20px rgba(217,119,87,0.35)}

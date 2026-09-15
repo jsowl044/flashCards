@@ -1,9 +1,10 @@
-const CACHE_NAME = 'flashcards-cache-v14';
+const CACHE_NAME = 'flashcards-cache-v16';
 const ASSETS = [
   '.',
   'index.html',
   'style.css',
   'app.js',
+  'firebase-init.js',
   'manifest.json',
   'icons/icon.svg'
 ];
@@ -27,9 +28,14 @@ self.addEventListener('fetch', (e)=>{
   const req = e.request;
   if(req.method !== 'GET') return;
 
-  // network-first for navigation and core JS/HTML so users get latest code
+  // Never intercept cross-origin requests (Firebase Auth/Firestore, the gstatic
+  // SDK, etc.) — a cache-first strategy on those would break auth and turn
+  // real-time sync into stale reads. Let the browser handle them normally.
   const url = new URL(req.url);
-  if(req.mode === 'navigate' || url.pathname.endsWith('index.html') || url.pathname.endsWith('app.js')){
+  if(url.origin !== self.location.origin) return;
+
+  // network-first for navigation and core JS/HTML so users get latest code
+  if(req.mode === 'navigate' || url.pathname.endsWith('index.html') || url.pathname.endsWith('app.js') || url.pathname.endsWith('firebase-init.js')){
     e.respondWith(
       fetch(req).then(res=>{
         const copy = res.clone(); caches.open(CACHE_NAME).then(c=>c.put(req, copy));

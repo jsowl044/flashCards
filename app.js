@@ -75,8 +75,50 @@ function saveDecks(decks){
   const serialized = JSON.stringify(decks);
   localStorage.setItem(STORAGE_KEY, serialized);
   localStorage.setItem(STORAGE_BACKUP_KEY, serialized);
+  if(!applyingRemoteUpdate) pushDecksToCloud(decks);
 }
 function findDeck(decks, deckId){ return decks.find(deck=>String(deck.id) === String(deckId)); }
+
+/* Cloud sync (Firebase) — optional. Everything above still works fully offline;
+   this only activates once firebase-init.js has a real project config and the
+   user signs in. */
+let cloudUser = null;
+let cloudUnsubscribe = null;
+let applyingRemoteUpdate = false;
+
+function pushDecksToCloud(decks){
+  if(!cloudUser || !window.firebaseSetDoc) return;
+  window.firebaseSetDoc(window.firebaseUserDocRef(cloudUser.uid), { decks, updatedAt: Date.now() })
+    .catch(e=>console.warn('Cloud sync failed:', e));
+}
+
+// One document per signed-in user holds the whole decks array — plenty for a
+// personal vocab list, and it keeps every existing call site (which all funnel
+// through saveDecks/loadDecks) working without a rewrite.
+function startCloudSync(user){
+  cloudUser = user;
+  if(cloudUnsubscribe) cloudUnsubscribe();
+  cloudUnsubscribe = window.firebaseOnSnapshot(window.firebaseUserDocRef(user.uid), (snap)=>{
+    if(!snap.exists()){
+      // First device ever to sign into this account: seed the cloud with what's local.
+      pushDecksToCloud(loadDecks());
+      return;
+    }
+    if(snap.metadata.hasPendingWrites) return; // local echo of our own write, already applied
+    const remoteDecks = snap.data().decks;
+    if(!Array.isArray(remoteDecks)) return;
+    applyingRemoteUpdate = true;
+    saveDecks(remoteDecks);
+    applyingRemoteUpdate = false;
+    refreshDecksIfIdle();
+    if(currentDeckId && !$('deck-detail').classList.contains('hidden')) renderDeckDetail(currentDeckId);
+  }, (e)=>console.warn('Cloud listener error:', e));
+}
+
+function stopCloudSync(){
+  if(cloudUnsubscribe){ cloudUnsubscribe(); cloudUnsubscribe = null; }
+  cloudUser = null;
+}
 
 /* Export / Import (JSON backup) */
 function exportDecks(){
@@ -334,6 +376,31 @@ document.addEventListener('DOMContentLoaded', ()=>{
       };
       window.visualViewport.addEventListener('resize', reposition);
       window.visualViewport.addEventListener('scroll', reposition);
+    }
+  }catch(e){/* ignore */}
+  // cloud sync sign-in (only appears once firebase-init.js has a real project config)
+  try{
+    const syncBtn = $('sync-btn');
+    if(syncBtn && window.firebaseCloudConfigured){
+      syncBtn.classList.remove('hidden');
+      window.firebaseGetRedirectResult().catch(e=>console.warn('Sign-in redirect error:', e));
+      window.firebaseOnAuthStateChanged((user)=>{
+        if(user){
+          startCloudSync(user);
+          syncBtn.classList.add('synced');
+          syncBtn.title = `Synced as ${user.email} — tap to sign out`;
+        } else {
+          stopCloudSync();
+          syncBtn.classList.remove('synced');
+          syncBtn.title = 'Sign in with Google to sync across devices';
+        }
+      });
+      syncBtn.addEventListener('click', ()=>{
+        if(cloudUser){ window.firebaseSignOut(); return; }
+        const hasLocalCards = loadDecks().some(d=>d.cards && d.cards.length);
+        if(hasLocalCards && !confirm('Signing in syncs this device with your cloud data. If you already synced from another device, this device\'s local cards may get replaced by the cloud copy. Continue?')) return;
+        window.firebaseSignInWithRedirect();
+      });
     }
   }catch(e){/* ignore */}
   // quick check: ensure style.css loads; if not, show instruction
