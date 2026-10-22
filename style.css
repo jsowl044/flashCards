@@ -44,6 +44,8 @@ main{padding:12px;flex:1;max-width:540px;margin:0 auto;width:100%}
 .card-face{font-size:20px;line-height:1.4;padding:8px}
 .hidden{display:none}
 input{width:100%;padding:10px;margin:8px 0;border-radius:12px;border:1px solid var(--muted);background:transparent;color:inherit}
+.empty-state{text-align:center;padding:20px 16px}
+.empty-state p{margin:0 0 14px;color:var(--muted);line-height:1.5}
 .search-wrap{position:relative}
 .search-wrap input{padding-right:38px}
 .search-clear{position:absolute;right:6px;top:50%;transform:translateY(-50%);width:26px;height:26px;padding:0;margin:0;border-radius:50%;border:0;background:var(--glass);color:var(--muted);font-size:16px;line-height:1;display:flex;align-items:center;justify-content:center}

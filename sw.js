@@ -1,4 +1,4 @@
-const CACHE_NAME = 'flashcards-cache-v17';
+const CACHE_NAME = 'flashcards-cache-v18';
 const ASSETS = [
   '.',
   'index.html',
@@ -6,7 +6,8 @@ const ASSETS = [
   'app.js',
   'firebase-init.js',
   'manifest.json',
-  'icons/icon.svg'
+  'icons/icon.svg',
+  'icons/apple-touch-icon.png'
 ];
 
 self.addEventListener('install', (e)=>{

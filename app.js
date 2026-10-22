@@ -4,9 +4,6 @@ const STORAGE_BACKUP_KEY = 'flashcards_decks_backup_v1';
 
 /* Utility */
 const $ = (id)=>document.getElementById(id);
-const todayISO = (offsetDays=0)=>{
-  const d=new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate()+offsetDays); return d.toISOString();
-}
 
 /* Data layer */
 function parseStoredDecks(value){
@@ -175,13 +172,11 @@ function deleteDeck(deckId){
   saveDecks(next);
 }
 
-function addCardToDeck(deckId, question, answer){
-  const decks=loadDecks();
-  const deck=findDeck(decks, deckId); if(!deck) return null;
-  const card={
-    id:Date.now().toString()+Math.random().toString(36).slice(2,6),
-    question:question,
-    answer:answer,
+function newCard(question, answer){
+  return {
+    id:Date.now().toString()+Math.random().toString(36).slice(2,8),
+    question,
+    answer,
     state:'NEW',
     // SM-2 fields
     reps:0,
@@ -190,7 +185,34 @@ function addCardToDeck(deckId, question, answer){
     lastEvaluation:'',
     nextReview: new Date().toISOString()
   };
+}
+
+function addCardToDeck(deckId, question, answer){
+  const decks=loadDecks();
+  const deck=findDeck(decks, deckId); if(!deck) return null;
+  const card=newCard(question, answer);
   deck.cards.push(card); saveDecks(decks); return card;
+}
+
+// Lets a first-time visitor try the study flow without typing cards or signing in.
+const SAMPLE_DECK = {
+  name: 'Sample: Spanish → English',
+  cards: [
+    ['hola', 'hello'], ['gracias', 'thank you'], ['por favor', 'please'],
+    ['buenos días', 'good morning'], ['¿cómo estás?', 'how are you?'],
+    ['lo siento', "I'm sorry"], ['agua', 'water'], ['casa', 'house'],
+    ['amigo', 'friend'], ['hasta luego', 'see you later']
+  ]
+};
+
+function loadSampleDeck(){
+  const decks = loadDecks();
+  decks.push({
+    id: `sample-${Date.now()}`,
+    name: SAMPLE_DECK.name,
+    cards: SAMPLE_DECK.cards.map(([q, a])=>newCard(q, a))
+  });
+  saveDecks(decks);
 }
 
 // Longer-interval (more mature) cards first, descending down to the shortest-cooldown
@@ -290,7 +312,7 @@ function renderDecks(){
   const list = $("decks-list"); list.innerHTML='';
   const decks = loadDecks();
     if(decks.length===0){
-      list.innerHTML = '<div class="card">No decks yet. Create one.</div>';
+      list.innerHTML = '<div class="card empty-state"><p>No decks yet. Create one, or try the app with a ready-made deck.</p><button class="btn primary" data-action="load-sample">Load sample deck</button></div>';
     return;
   }
 
@@ -300,7 +322,7 @@ function renderDecks(){
     const nextDueInfo = computeNextDueInfo(deck);
     const el = document.createElement('div'); el.className='card deck-item';
       el.innerHTML = `<div class="deck-info"><strong>${escapeHtml(deck.name)}</strong><div class="deck-meta">Due today: ${due} · Total: ${total} · ${escapeHtml(nextDueInfo)}</div></div>
-      <div class="deck-actions"><button class="btn primary" data-action="study" data-id="${deck.id}" ${due===0? 'disabled':''}>Study</button> <button class="btn icon" aria-label="Manage" data-action="manage" data-id="${deck.id}">⚙️</button></div>`
+      <div class="deck-actions"><button class="btn primary" data-action="study" data-id="${escapeHtml(deck.id)}" ${due===0? 'disabled':''}>Study</button> <button class="btn icon" aria-label="Manage" data-action="manage" data-id="${escapeHtml(deck.id)}">⚙️</button></div>`
     list.appendChild(el);
     // attach direct handler to Manage button as fallback
     try{
@@ -438,6 +460,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
       const action = btn.dataset.action; const id=btn.dataset.id;
       if(action==='study') startStudy(id);
       if(action==='manage') openDeckDetail(id);
+      if(action==='load-sample'){ loadSampleDeck(); renderDecks(); }
     }catch(e){ showError('Error handling deck action: '+e.message); }
   });
 
@@ -586,7 +609,7 @@ function renderDeckDetail(deckId){
   visibleCards.forEach(card=>{
     const el = document.createElement('div'); el.className='card deck-item';
     el.innerHTML = `<div style="flex:1"><strong>${escapeHtml(card.question)}</strong><div class="deck-meta">${escapeHtml(card.answer)}</div></div>
-      <div style="display:flex;flex-direction:column;gap:6px"><button class="btn" data-action="edit" data-id="${card.id}">Edit</button><button class="btn" data-action="delete" data-id="${card.id}">Delete</button></div>`;
+      <div style="display:flex;flex-direction:column;gap:6px"><button class="btn" data-action="edit" data-id="${escapeHtml(card.id)}">Edit</button><button class="btn" data-action="delete" data-id="${escapeHtml(card.id)}">Delete</button></div>`;
     list.appendChild(el);
   });
   // actions inside detail
