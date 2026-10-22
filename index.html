@@ -10,7 +10,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
-  <link rel="stylesheet" href="style.css?v=13">
+  <link rel="stylesheet" href="style.css">
   <meta name="description" content="Offline-first spaced-repetition flashcards with optional cross-device sync.">
   <title>Flashcards PWA</title>
 </head>
@@ -116,8 +116,7 @@
     </section>
   </main>
 
-  <script type="module" src="firebase-init.js"></script>
-  <script src="app.js" defer></script>
+  <script type="module" src="js/app.js"></script>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {

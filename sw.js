@@ -1,11 +1,24 @@
-const CACHE_NAME = 'flashcards-cache-v18';
+// Bump CACHE_NAME whenever ASSETS changes (that is what re-runs the install step and
+// pre-caches the new list). Individual files never need a version bump: every same-origin
+// request goes to the network first, so deploys show up on the next load.
+const CACHE_NAME = 'flashcards-cache-v19';
 const ASSETS = [
   '.',
   'index.html',
   'style.css',
-  'app.js',
-  'firebase-init.js',
   'manifest.json',
+  'firebase-init.js',
+  'js/app.js',
+  'js/backup.js',
+  'js/deck-detail.js',
+  'js/decks-view.js',
+  'js/decks.js',
+  'js/dom.js',
+  'js/platform.js',
+  'js/scheduler.js',
+  'js/storage.js',
+  'js/study.js',
+  'js/sync.js',
   'icons/icon.svg',
   'icons/apple-touch-icon.png'
 ];
@@ -17,11 +30,10 @@ self.addEventListener('install', (e)=>{
 
 self.addEventListener('activate', (e)=>{
   e.waitUntil((async ()=>{
-    // claim clients
     await self.clients.claim();
-    // remove old caches
+    // remove caches left by older versions
     const keys = await caches.keys();
-    await Promise.all(keys.map(k=>{ if(k!==CACHE_NAME) return caches.delete(k); return Promise.resolve(); }));
+    await Promise.all(keys.filter(k=>k !== CACHE_NAME).map(k=>caches.delete(k)));
   })());
 });
 
@@ -30,24 +42,23 @@ self.addEventListener('fetch', (e)=>{
   if(req.method !== 'GET') return;
 
   // Never intercept cross-origin requests (Firebase Auth/Firestore, the gstatic
-  // SDK, etc.) — a cache-first strategy on those would break auth and turn
-  // real-time sync into stale reads. Let the browser handle them normally.
-  const url = new URL(req.url);
-  if(url.origin !== self.location.origin) return;
+  // SDK, etc.) — caching those would break auth and turn real-time sync into
+  // stale reads. Let the browser handle them normally.
+  if(new URL(req.url).origin !== self.location.origin) return;
 
-  // network-first for navigation and core JS/HTML so users get latest code
-  if(req.mode === 'navigate' || url.pathname.endsWith('index.html') || url.pathname.endsWith('app.js') || url.pathname.endsWith('firebase-init.js')){
-    e.respondWith(
-      fetch(req).then(res=>{
-        const copy = res.clone(); caches.open(CACHE_NAME).then(c=>c.put(req, copy));
-        return res;
-      }).catch(()=> caches.match(req).then(cached=> cached || caches.match('index.html')))
-    );
-    return;
-  }
-
-  // cache-first for other assets
+  // Network first, cache as the offline fallback.
   e.respondWith(
-    caches.match(req).then(cached=> cached || fetch(req).then(res=>{ const r=res.clone(); caches.open(CACHE_NAME).then(c=>c.put(req,r)); return res; }).catch(()=>{}))
+    fetch(req).then(res=>{
+      if(res.ok){
+        const copy = res.clone();
+        caches.open(CACHE_NAME).then(c=>c.put(req, copy));
+      }
+      return res;
+    }).catch(async ()=>{
+      const cached = await caches.match(req);
+      if(cached) return cached;
+      if(req.mode === 'navigate') return caches.match('index.html');
+      return Response.error();
+    })
   );
 });

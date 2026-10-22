@@ -1,5 +1,8 @@
 # Flashcards — an offline-first spaced-repetition PWA
 
+[![Tests](https://github.com/jsowl044/flashCards/actions/workflows/test.yml/badge.svg)](https://github.com/jsowl044/flashCards/actions/workflows/test.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 A small Anki-style flashcards app that installs on your phone, works with no connection, and can optionally sync your decks across devices. Built with **vanilla JavaScript, no framework and no build step**.
 
 **[Live demo →](https://flash-cards-theta-steel.vercel.app/)** (works without an account: tap *Load sample deck* on the empty screen)
@@ -49,25 +52,55 @@ The ease factor starts at 2.5, drops on *Again*/*Hard*, rises on *Easy*, and nev
 
 The decisions that were most interesting to work through:
 
-- **Local-first data flow.** `localStorage` is always the source of truth the UI reads from, so rendering is synchronous and the app is instant offline. Every mutation goes through one function (`saveDecks`), which is also the single hook that pushes to the cloud. Sync was added without touching any call site.
-- **Sync as an optional layer.** One Firestore document per user holds the decks array; a snapshot listener applies remote changes through the same save/render path, with a guard flag to avoid push-back loops. With no Firebase config the sign-in button never appears and no network calls are made.
+- **Plain ES modules, no build step.** The code is split by responsibility (below) and loaded with `<script type="module">`. The scheduler and the sync logic are free of DOM access, which is what makes them unit-testable.
+- **Local-first data flow.** `localStorage` is always the source of truth the UI reads from, so rendering is synchronous and the app is instant offline. Every mutation goes through one function (`saveDecks`), and anything that cares about saves (cloud sync) subscribes to it with `onSave()`. Sync was added without touching any call site.
+- **Sync as an optional layer.** One Firestore document per user holds the decks array; a snapshot listener applies remote changes with a *silent* save so they never bounce back to the cloud. With no Firebase config the sign-in button never appears and no network calls are made.
+- **The Firebase SDK is loaded with a dynamic `import()`.** It comes from a CDN, and a static import would stop the whole app from starting whenever that CDN is unreachable (offline, blocked). Loading it lazily inside a `try/catch` means the app simply runs without sync.
 - **iOS Safari and Firebase Auth.** `signInWithRedirect` silently failed on iPhone: tracking prevention blocks the storage the redirect round-trip depends on. Switching to `signInWithPopup` (with a redirect fallback) fixed it.
-- **Service worker strategy.** Network-first for the app shell so updates arrive quickly, cache-first for static assets, and cross-origin requests are never intercepted. An earlier version cached Firebase traffic, which would have broken auth and made real-time sync serve stale data.
+- **Service worker strategy.** Same-origin requests are network-first with the cache as the offline fallback, so a deploy shows up on the next load with no manual cache-busting. Cross-origin requests are never intercepted: an earlier version cached Firebase traffic, which would have broken auth and made real-time sync serve stale data.
+- **Live study queue.** A session's queue is a snapshot, so cards whose cooldown expires mid-session are merged in by a pure function (`mergeNewlyDue`) that never touches the card currently on screen.
 - **Keyboard-aware docked search bar.** iOS Safari doesn't reflow `position: fixed` elements when the on-screen keyboard opens, so the bar listens to `window.visualViewport` and translates itself above the keyboard.
 - **Data migration.** Stored data is normalised on load (missing fields, legacy shapes), with an automatic backup copy restored if the main entry is corrupted.
+
+## Tests
+
+```bash
+npm test
+```
+
+It uses Node's built-in test runner, so there is nothing to install. The suite (90 tests, run on Node 20 and 22 in CI) covers:
+
+- **Scheduler:** every rating in both card states, the ease-factor floor, Easy always landing after Good, due ordering, the "due in…" labels, and the mid-session queue merge.
+- **Storage:** migration of legacy data, recovery from the backup copy, and save listeners.
+- **Sync:** against an in-memory fake of Firebase: seeding an empty account, applying remote changes without pushing them back, ignoring the echo of the app's own writes, and the app starting normally when Firebase can't load.
+- **Decks and import:** id uniqueness, import validation, and that import never overwrites existing data.
+
+As a sanity check on the tests themselves, I injected eleven deliberate bugs (a wrong multiplier, a dropped ease floor, reversed ordering, a missing backup write, and so on) into a throwaway copy, and the suite caught every one.
 
 ## Project structure
 
 ```
-index.html          app shell and markup
-app.js              data layer, scheduler, cloud sync and UI
-firebase-init.js    optional Firebase setup (ES module, exposes helpers on window)
-sw.js               service worker
-style.css           theming (CSS variables) and layout
-manifest.json       PWA manifest
-firestore.rules     security rules for the sync document
-icons/              SVG + PNG icons (iOS touch icon, maskable)
-docs/screenshots/   images used in this README
+index.html            app shell and markup
+style.css             theming (CSS variables) and layout
+sw.js                 service worker
+manifest.json         PWA manifest
+firebase-init.js      optional Firebase config; exports `cloud`, or null when unconfigured
+firestore.rules       security rules for the sync document
+js/
+  app.js              entry point: wires the modules together
+  scheduler.js        spaced-repetition rules and due-card logic (pure)
+  storage.js          localStorage persistence, migration, save hooks
+  decks.js            create / rename / delete decks and cards, import, sample deck
+  sync.js             optional Firestore sync (no DOM access)
+  decks-view.js       deck list screen
+  deck-detail.js      manage-deck screen
+  study.js            study session
+  backup.js           JSON export / import UI
+  platform.js         theme and keyboard-aware search bar
+  dom.js              small DOM helpers
+tests/                unit tests (node:test)
+icons/                SVG + PNG icons (iOS touch icon, maskable)
+docs/screenshots/     images used in this README
 ```
 
 ## Run locally
@@ -101,11 +134,11 @@ Firebase web config values identify the project, they are not secrets; access is
 ```json
 [
   {
-    "id": "1789478310908",
+    "id": "mgz4k2f1a8xq",
     "name": "Spanish → English",
     "cards": [
       {
-        "id": "178947831090945b5",
+        "id": "mgz4k2f1c9ptm",
         "question": "hola",
         "answer": "hello",
         "state": "NEW",
@@ -127,8 +160,8 @@ The same array is what the JSON export produces and what is stored in Firestore.
 I'd rather be upfront about what this is: a personal project, not a polished product.
 
 - **Sync is last-write-wins** on the whole decks array. Editing offline on two devices and then syncing can overwrite one set of changes. Merging per card (by id and timestamp) is the natural next step.
-- **No automated tests yet.** The scheduler (`calculateSchedule`) is the most valuable thing to cover first.
-- **`app.js` is a single file.** Splitting it into ES modules (storage, scheduler, sync, UI) is planned.
+- **The UI layer has no automated tests in the repo.** The logic modules are unit-tested; I verified the screens with a throwaway browser script, and turning that into a committed end-to-end test is a good next step.
+- **No linter or formatter yet.**
 - The viewport disables pinch-zoom on purpose, to feel like a native iOS app; that is a trade-off against accessibility.
 
 ## License

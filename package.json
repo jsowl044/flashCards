@@ -1,0 +1,19 @@
+{
+  "name": "flashcards-pwa",
+  "version": "1.0.0",
+  "description": "Offline-first spaced-repetition flashcards PWA with optional cross-device sync.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test",
+    "start": "npx serve ."
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jsowl044/flashCards.git"
+  },
+  "license": "MIT"
+}
