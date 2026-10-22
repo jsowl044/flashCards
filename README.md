@@ -68,7 +68,7 @@ The decisions that were most interesting to work through:
 npm test
 ```
 
-It uses Node's built-in test runner, so there is nothing to install. The suite (90 tests, run on Node 20 and 22 in CI) covers:
+It uses Node's built-in test runner, so there is nothing to install. The suite (90 tests, run on Node 22 and 24 in CI) covers:
 
 - **Scheduler:** every rating in both card states, the ease-factor floor, Easy always landing after Good, due ordering, the "due in…" labels, and the mid-session queue merge.
 - **Storage:** migration of legacy data, recovery from the backup copy, and save listeners.
